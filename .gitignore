@@ -1,2 +1,3 @@
 *.mdl
-extracted_lod_data/
+extracted_lod_data/*
+__pycache__/*
