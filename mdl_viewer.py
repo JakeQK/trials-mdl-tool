@@ -19,15 +19,21 @@ class BasicGLWidget(QGLWidget):
         super().__init__(parent)
         self.vertices = []
         self.faces = []
+        self.normals = []
         self.rotation_x = 0
         self.rotation_y = 0
         self.zoom = -10.0
         self.last_pos = None
+        
+        # Rendering flags
+        self.show_wireframe = True
+        self.show_solid = True
 
     def load_obj(self, obj_file):
         """Load vertices and faces from an OBJ file"""
         self.vertices = []
         self.faces = []
+        self.normals = []  # Added normals list
         
         print(f"Loading OBJ file: {obj_file}")
         try:
@@ -54,6 +60,9 @@ class BasicGLWidget(QGLWidget):
                             
             print(f"Loaded {len(self.vertices)} vertices and {len(self.faces)} faces")
             
+            # Calculate normals for each face
+            self.calculate_normals()
+            
             # Calculate the bounds for centering and zooming
             if self.vertices:
                 self.center_and_scale()
@@ -63,6 +72,40 @@ class BasicGLWidget(QGLWidget):
         except Exception as e:
             print(f"Error loading OBJ: {e}")
             return False
+            
+    def calculate_normals(self):
+        """Calculate normals for all faces"""
+        self.normals = []
+        
+        for face in self.faces:
+            if len(face) >= 3:
+                # Make sure indices are valid
+                if all(idx < len(self.vertices) for idx in face):
+                    v0 = self.vertices[face[0]]
+                    v1 = self.vertices[face[1]]
+                    v2 = self.vertices[face[2]]
+                    
+                    # Calculate vectors from v0 to v1 and v0 to v2
+                    u = [v1[0]-v0[0], v1[1]-v0[1], v1[2]-v0[2]]
+                    v = [v2[0]-v0[0], v2[1]-v0[1], v2[2]-v0[2]]
+                    
+                    # Calculate normal with cross product
+                    normal = [
+                        u[1]*v[2] - u[2]*v[1],
+                        u[2]*v[0] - u[0]*v[2],
+                        u[0]*v[1] - u[1]*v[0]
+                    ]
+                    
+                    # Normalize the vector
+                    length = np.sqrt(normal[0]**2 + normal[1]**2 + normal[2]**2)
+                    if length > 0:
+                        normal = [normal[0]/length, normal[1]/length, normal[2]/length]
+                    else:
+                        normal = [0, 0, 1]  # Default if calculation fails
+                        
+                    self.normals.append(normal)
+                else:
+                    self.normals.append([0, 0, 1])  # Default normal
             
     def center_and_scale(self):
         """Center and scale the model to fit in view"""
@@ -101,6 +144,19 @@ class BasicGLWidget(QGLWidget):
         glClearColor(0.2, 0.2, 0.2, 1.0)  # Dark gray background
         glEnable(GL_DEPTH_TEST)
         
+        # Enable lighting for better 3D appearance
+        glEnable(GL_LIGHTING)
+        glEnable(GL_LIGHT0)
+        glEnable(GL_COLOR_MATERIAL)
+        
+        # Set light position and properties
+        glLightfv(GL_LIGHT0, GL_POSITION, [1.0, 1.0, 1.0, 0.0])  # Directional light from top-right
+        glLightfv(GL_LIGHT0, GL_AMBIENT, [0.3, 0.3, 0.3, 1.0])   # Ambient light
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, [1.0, 1.0, 1.0, 1.0])   # Diffuse light
+        
+        # Enable smooth shading
+        glShadeModel(GL_SMOOTH)
+        
     def resizeGL(self, width, height):
         """Handle window resize"""
         glViewport(0, 0, width, height)
@@ -125,6 +181,8 @@ class BasicGLWidget(QGLWidget):
             glTranslatef(-self.center_x, -self.center_y, -self.center_z)
         
         # Draw coordinate axes (for reference)
+        # Disable lighting for axes
+        glDisable(GL_LIGHTING)
         glBegin(GL_LINES)
         # X axis - red
         glColor3f(1.0, 0.0, 0.0)
@@ -140,16 +198,43 @@ class BasicGLWidget(QGLWidget):
         glVertex3f(0, 0, 2)
         glEnd()
         
-        # Draw model as wireframe
-        if self.vertices and self.faces:
-            glColor3f(1.0, 1.0, 1.0)  # White wireframe
-            glBegin(GL_TRIANGLES)
-            for face in self.faces:
-                for vertex_idx in face:
-                    # Check index is valid
-                    if 0 <= vertex_idx < len(self.vertices):
-                        glVertex3fv(self.vertices[vertex_idx])
-            glEnd()
+        # Draw model with lighting 
+        if self.vertices and self.faces and self.normals:
+            # Draw solid model
+            if self.show_solid:
+                glEnable(GL_LIGHTING)
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
+                glColor3f(0.75, 0.75, 0.75)  # Light gray color
+                
+                glBegin(GL_TRIANGLES)
+                for i, face in enumerate(self.faces):
+                    # Apply the face normal
+                    if i < len(self.normals):
+                        glNormal3fv(self.normals[i])
+                    
+                    # Draw the vertices
+                    for vertex_idx in face:
+                        # Check index is valid
+                        if 0 <= vertex_idx < len(self.vertices):
+                            glVertex3fv(self.vertices[vertex_idx])
+                glEnd()
+            
+            # Draw wireframe
+            if self.show_wireframe:
+                glDisable(GL_LIGHTING)
+                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+                glColor3f(0.0, 0.0, 0.0)  # Black wireframe
+                glLineWidth(1.0)
+                
+                glBegin(GL_TRIANGLES)
+                for face in self.faces:
+                    for vertex_idx in face:
+                        if 0 <= vertex_idx < len(self.vertices):
+                            glVertex3fv(self.vertices[vertex_idx])
+                glEnd()
+            
+            # Reset to fill mode
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
             
     def mousePressEvent(self, event):
         """Handle mouse press for rotation"""
@@ -197,15 +282,49 @@ class BasicMDLViewer(QMainWindow):
         self.gl_widget = BasicGLWidget(self)
         layout.addWidget(self.gl_widget)
         
+        # Create button layout
+        button_layout = QVBoxLayout()
+        
         # Add button to open MDL files
         self.open_button = QPushButton("Open MDL File", self)
         self.open_button.clicked.connect(self.open_mdl_file)
-        layout.addWidget(self.open_button)
+        button_layout.addWidget(self.open_button)
+        
+        # Add shading options
+        self.shading_label = QLabel("Rendering Options:")
+        button_layout.addWidget(self.shading_label)
+        
+        # Add wireframe toggle
+        self.wireframe_button = QPushButton("Toggle Wireframe", self)
+        self.wireframe_button.setCheckable(True)
+        self.wireframe_button.setChecked(True)
+        self.wireframe_button.clicked.connect(self.toggle_wireframe)
+        button_layout.addWidget(self.wireframe_button)
+        
+        # Add solid toggle  
+        self.solid_button = QPushButton("Toggle Solid", self)
+        self.solid_button.setCheckable(True)
+        self.solid_button.setChecked(True)
+        self.solid_button.clicked.connect(self.toggle_solid)
+        button_layout.addWidget(self.solid_button)
+        
+        # Add button layout to main layout
+        layout.addLayout(button_layout)
         
         # Add status bar
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
         self.status_bar.showMessage("Ready")
+        
+    def toggle_wireframe(self, checked):
+        """Toggle wireframe rendering"""
+        self.gl_widget.show_wireframe = checked
+        self.gl_widget.updateGL()
+        
+    def toggle_solid(self, checked):
+        """Toggle solid rendering"""
+        self.gl_widget.show_solid = checked
+        self.gl_widget.updateGL()
         
     def open_mdl_file(self):
         """Open and process an MDL file"""
