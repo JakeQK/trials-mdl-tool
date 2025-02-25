@@ -100,14 +100,100 @@ def parse_model_file(filepath):
                 decompressed_face_data = compressed_face_data
                 print(f"  Using compressed face data instead: {len(decompressed_face_data)} bytes")
             
-            # Concatenate the decompressed data and save to file
+            # Process decompressed_geometry_data to extract vertices
+            vertices = []
+            geometry_data = decompressed_geometry_data
+            
+            # Skip the first 4 bytes of unknown data
+            offset = 4
+            
+            # Each vertex is 6 bytes (three 2-byte floats) followed by 10 bytes of unknown data
+            vertex_size = 6 + 10
+            
+            print(f"  Debugging first few vertices:")
+            max_debug_vertices = min(5, (len(geometry_data) - 4) // vertex_size)
+            
+            while offset + vertex_size <= len(geometry_data):
+                # Extract the raw bytes for debugging
+                x_bytes = geometry_data[offset:offset+2]
+                y_bytes = geometry_data[offset+2:offset+4]
+                z_bytes = geometry_data[offset+4:offset+6]
+                
+                # Convert to signed 16-bit integers (little-endian)
+                x_int = struct.unpack('<h', x_bytes)[0]
+                y_int = struct.unpack('<h', y_bytes)[0]
+                z_int = struct.unpack('<h', z_bytes)[0]
+                
+                # Convert to float by dividing by 256.0
+                x = x_int / 256.0
+                y = y_int / 256.0
+                z = z_int / 256.0
+                
+                # Debug output for the first few vertices
+                if len(vertices) < max_debug_vertices:
+                    print(f"    Vertex {len(vertices)}:")
+                    print(f"      Bytes: {x_bytes.hex()} {y_bytes.hex()} {z_bytes.hex()}")
+                    print(f"      Int16: {x_int} {y_int} {z_int}")
+                    print(f"      Float: {x:.4f} {y:.4f} {z:.4f}")
+                
+                vertices.append((x, y, z))
+                
+                # Skip to the next vertex
+                offset += vertex_size
+            
+            print(f"  Extracted {len(vertices)} vertices from geometry data")
+            
+            # Process decompressed_face_data to extract faces
+            faces = []
+            face_data = decompressed_face_data
+            
+            # Each face is 3 shorts (2 bytes each) representing vertex indices
+            face_size = 2 * 3
+            offset = 0
+            
+            while offset + face_size <= len(face_data):
+                v1 = struct.unpack('h', face_data[offset:offset+2])[0]
+                v2 = struct.unpack('h', face_data[offset+2:offset+4])[0]
+                v3 = struct.unpack('h', face_data[offset+4:offset+6])[0]
+                
+                # OBJ format uses 1-based indices
+                faces.append((v1 + 1, v2 + 1, v3 + 1))
+                
+                # Skip to the next face
+                offset += face_size
+            
+            print(f"  Extracted {len(faces)} faces from face data")
+            
+            # Write to OBJ file
+            obj_filename = f"extracted_lod_data/lod_{lod_index}.obj"
+            
+            with open(obj_filename, 'w') as obj_file:
+                obj_file.write(f"# OBJ file - LOD {lod_index}\n")
+                obj_file.write(f"# Vertices: {len(vertices)}\n")
+                obj_file.write(f"# Faces: {len(faces)}\n\n")
+                
+                # Write vertices with higher precision
+                for i, (x, y, z) in enumerate(vertices):
+                    obj_file.write(f"v {x:.6f} {y:.6f} {z:.6f}\n")
+                    
+                    # Debug output for first few vertices in the OBJ file
+                    if i < 5:
+                        print(f"    OBJ vertex {i+1}: v {x:.6f} {y:.6f} {z:.6f}")
+                
+                # Write faces
+                for v1, v2, v3 in faces:
+                    obj_file.write(f"f {v1} {v2} {v3}\n")
+            
+            print(f"  Saved OBJ file to {obj_filename}")
+            
+            # Also save the raw decompressed data for reference
             combined_data = decompressed_geometry_data + decompressed_face_data
-            output_filename = f"extracted_lod_data/lod_{lod_index}_decompressed.bin"
+            binary_filename = f"extracted_lod_data/lod_{lod_index}_decompressed.bin"
             
-            with open(output_filename, 'wb') as out_file:
-                out_file.write(combined_data)
+            with open(binary_filename, 'wb') as bin_file:
+                bin_file.write(combined_data)
             
-            print(f"  Saved combined decompressed data to {output_filename}")
+            print(f"  Saved raw decompressed data to {binary_filename}")
             print(f"  Total decompressed size: {len(combined_data)} bytes")
             print(f"  (Geometry: {len(decompressed_geometry_data)} bytes, Face: {len(decompressed_face_data)} bytes)")
 
