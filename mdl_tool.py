@@ -103,18 +103,16 @@ def parse_model_file(filepath):
             # Process decompressed_geometry_data to extract vertices
             vertices = []
             geometry_data = decompressed_geometry_data
-            
+
             # Skip the first 4 bytes of unknown data
             offset = 4
             
             # Each vertex is 6 bytes (three 2-byte floats) followed by 10 bytes of unknown data
-            vertex_size = 6 + 10
+            vertex_size = 4 + 6 + 10
             
-            print(f"  Debugging first few vertices:")
-            max_debug_vertices = min(5, (len(geometry_data) - 4) // vertex_size)
-            
-            while offset + vertex_size <= len(geometry_data):
-                # Extract the raw bytes for debugging
+            while offset + vertex_size <= len(geometry_data) + 4:
+
+                # Extract the raw bytes for vertex coordinates
                 x_bytes = geometry_data[offset:offset+2]
                 y_bytes = geometry_data[offset+2:offset+4]
                 z_bytes = geometry_data[offset+4:offset+6]
@@ -128,13 +126,6 @@ def parse_model_file(filepath):
                 x = x_int / 256.0
                 y = y_int / 256.0
                 z = z_int / 256.0
-                
-                # Debug output for the first few vertices
-                if len(vertices) < max_debug_vertices:
-                    print(f"    Vertex {len(vertices)}:")
-                    print(f"      Bytes: {x_bytes.hex()} {y_bytes.hex()} {z_bytes.hex()}")
-                    print(f"      Int16: {x_int} {y_int} {z_int}")
-                    print(f"      Float: {x:.4f} {y:.4f} {z:.4f}")
                 
                 vertices.append((x, y, z))
                 
