@@ -2,12 +2,12 @@ import struct
 import os
 import zlib
 
-def parse_model_file(filepath):
+def parse_mdl_file(filepath):
     """
-    Parse the 3D model file format and extract compressed geometry and face data for each LOD.
+    Parse the Trials Fusion .mdl file format and output an OBJ for each LOD.
     
     Args:
-        filepath: Path to the model file
+        filepath: Path to the .mdl file
     """
     with open(filepath, 'rb') as f:
         # Parse header
@@ -89,16 +89,13 @@ def parse_model_file(filepath):
                 print(f"  Decompressed geometry data size: {len(decompressed_geometry_data)} bytes")
             except zlib.error as e:
                 print(f"  Error decompressing geometry data: {e}")
-                decompressed_geometry_data = compressed_geometry_data
-                print(f"  Using compressed geometry data instead: {len(decompressed_geometry_data)} bytes")
+                exit()
             
             try:
                 decompressed_face_data = zlib.decompress(compressed_face_data)
-                print(f"  Decompressed face data size: {len(decompressed_face_data)} bytes")
             except zlib.error as e:
                 print(f"  Error decompressing face data: {e}")
-                decompressed_face_data = compressed_face_data
-                print(f"  Using compressed face data instead: {len(decompressed_face_data)} bytes")
+                exit()
             
             # Process decompressed_geometry_data to extract vertices
             vertices = []
@@ -166,10 +163,6 @@ def parse_model_file(filepath):
                 # Write vertices with higher precision
                 for i, (x, y, z) in enumerate(vertices):
                     obj_file.write(f"v {x:.6f} {y:.6f} {z:.6f}\n")
-                    
-                    # Debug output for first few vertices in the OBJ file
-                    if i < 5:
-                        print(f"    OBJ vertex {i+1}: v {x:.6f} {y:.6f} {z:.6f}")
                 
                 # Write faces
                 for v1, v2, v3 in faces:
@@ -192,9 +185,9 @@ if __name__ == "__main__":
     import sys
     
     if len(sys.argv) != 2:
-        print("Usage: python model_parser.py <model_file_path>")
+        print("Usage: python mdl_tool.py <mdl_file_path>")
         sys.exit(1)
     
     model_file_path = sys.argv[1]
-    parse_model_file(model_file_path)
+    parse_mdl_file(model_file_path)
     print("\nProcessing complete!")
