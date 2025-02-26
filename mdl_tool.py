@@ -199,7 +199,19 @@ def read_lod_header(f: BinaryIO) -> Dict[str, Any]:
     lod_data['id_string'] = f.read(id_string_length)
     
     # Read another unknown data block
-    lod_data['unknown_data2'] = f.read(10)
+    lod_data['unknown_data2'] = f.read(7)
+
+    # Read unknown 4 byte value count, it tells us how many 4 byte values follow after this+2 bytes
+    four_byte_value_count = struct.unpack('b', f.read(1))[0]
+    lod_data['four_byte_value_count'] = four_byte_value_count
+
+    # NOTE
+    # Majority of objects, the four_byte_value_count is 0, this was considered normal
+    # Some objects, such as rider customization, seem to have a value, and even when addressing/ignoring the extra bytes
+    # The object doesn't seem to load correctly, so I will need to investigate why the object model isn't being read correctly when these values are present
+
+    # Read another unknown data block, consisting of a number of 4 byte values and 2 bytes
+    lod_data['unknown_data3'] = f.read(four_byte_value_count * 4 + 2)
     
     # Read compressed geometry data
     compressed_geometry_data_len = struct.unpack('i', f.read(4))[0]
